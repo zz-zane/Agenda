@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#d9eaf4"><link rel="icon" href="/favicon.svg">
+  <script>{let theme=window.agendaAppearance?.theme||'light';try{const saved=localStorage.getItem('agenda.theme');if(['light','dark'].includes(saved))theme=saved;}catch{}document.documentElement.dataset.theme=theme;}</script>
+  <link rel="stylesheet" href="/styles.css"><title>Agenda · 我的日历</title>
+</head>
+<body>
+  <div id="boot-sequence-demo" role="status" aria-label="KEEP GOING">
+    <section class="daylight-stage"><div class="boot-surface">
+      <div class="boot-status" aria-hidden="true">START WITH TODAY</div>
+      <div class="boot-track" aria-hidden="true"><span class="boot-progress"></span></div>
+    </div></section>
+  </div>
+  <script>
+  (()=>{
+    const root=document.getElementById('boot-sequence-demo'),status=root.querySelector('.boot-status'),stage=root.querySelector('.daylight-stage');
+    const dark=document.documentElement.dataset.theme==='dark';
+    if(dark){root.classList.add('diagonal-boot');root.style.setProperty('--meteor-angle',`${Math.atan2(innerHeight,innerWidth)}rad`);}
+    let short=window.agendaAppearance?.shortBoot===true;
+    if(!window.agendaAppearance)try{short=JSON.parse(localStorage.getItem('agenda.preferences')||'{}').shortBoot===true;}catch{}
+    if(short)root.classList.add('short-boot');
+    const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const colors=['#ed789b','#f0aa70','#f2d477','#78cda2','#75b5ef','#a18cde'];
+    function phrase(text,arriving=false){status.replaceChildren(...Array.from(text,(char,i)=>{const s=document.createElement('span');s.className='boot-char'+(arriving?' is-arriving':'');s.textContent=char===' '?'\u00a0':char;s.style.setProperty('--letter-color',colors[i%colors.length]);s.style.setProperty('--letter-delay',`${i*30}ms`);s.style.setProperty('--letter-tilt',`${i%2?7:-7}deg`);return s;}));
+      if(dark&&!reduced&&!short){
+        const spans=[...status.children],started=performance.now(),glyphs='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%<>/';
+        status.classList.add('is-decoding');
+        const timer=setInterval(()=>{
+          const progress=Math.min(1,(performance.now()-started)/450);
+          spans.forEach((span,i)=>{const settled=progress>=1||i<progress*spans.length;span.textContent=text[i]===' '?'\u00a0':settled?text[i]:glyphs[Math.floor(Math.random()*glyphs.length)];span.classList.toggle('glitch-letter',!settled&&Math.random()>.55);});
+          if(progress===1||!root.isConnected){clearInterval(timer);status.classList.remove('is-decoding');}
+        },40);
+      }
+    }
+    if(reduced){phrase('KEEP GOING');setTimeout(()=>root.remove(),700);return;}
+    phrase(short?'KEEP GOING':'START WITH TODAY');
+    if(!dark&&!short)setTimeout(()=>{status.querySelectorAll('.boot-char').forEach(s=>s.classList.add('is-falling'));},900);
+    if(!short)setTimeout(()=>phrase('KEEP GOING',true),dark?1600:2100);
+    setTimeout(()=>stage.classList.add('is-ready'),short?750:dark?3000:3900);
+    setTimeout(()=>{
+      for(const side of ['top','bottom']){
+        const half=document.createElement('div');half.className='boot-half boot-half-'+side;half.setAttribute('aria-hidden','true');
+        half.append(stage.cloneNode(true));root.append(half);
+      }
+      stage.remove();
+      if(dark){const meteor=document.createElement('div');meteor.className='boot-meteor';meteor.setAttribute('aria-hidden','true');root.append(meteor);}
+    },short?1050:dark?3550:4750);
+    setTimeout(()=>root.classList.add('is-split'),short?(dark?1750:1150):dark?4250:5550);
+    setTimeout(()=>root.remove(),short?(dark?2700:2300):dark?5200:6700);
+  })();
+  </script>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="收起侧栏" title="收起侧栏"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M9 3v18" stroke="currentColor" stroke-width="1.7"/></svg></button>
+      <div class="nav-label">我的空间</div>
+      <nav aria-label="主导航">
+        <button data-page="calendar" class="nav-item active"><span aria-hidden="true">▦</span><span>日历<small>Calendar</small></span></button>
+        <button data-page="import" class="nav-item"><span aria-hidden="true">↥</span><span>导入<small>Import</small></span></button>
+        <button data-page="checkins" class="nav-item"><span aria-hidden="true">✓</span><span>打开与打卡<small>Check-ins</small></span></button>
+        <button data-page="ai" class="nav-item"><span aria-hidden="true">✧</span><span>AI<small>Chat & plan</small></span></button>
+        <button data-page="settings" class="nav-item"><span aria-hidden="true">⚙</span><span>设置<small>Settings</small></span></button>
+      </nav>
+      <div class="sidebar-foot"><span class="live-dot"></span>属于你的每一天<small id="computerDate"></small></div>
+    </aside>
+    <main>
+      <div class="topline"><span id="breadcrumb">我的日历</span><span class="local-badge">● 本地保存</span></div>
+      <section id="calendarPage" class="glass page">
+        <header class="calendar-header">
+          <div><p class="eyebrow">AGENDA / YOUR OWN PACE</p><h1 id="calendarTitle"></h1><p id="calendarSubtitle" class="subtitle"></p></div>
+          <div class="calendar-tools"><div class="date-nav"><button id="prev" aria-label="上一段日期">‹</button><button id="today">今天</button><button id="next" aria-label="下一段日期">›</button></div>
+            <div class="segments" aria-label="日历视图"><button data-view="month" class="selected">月</button><button data-view="week">周</button><button data-view="day">日</button></div>
+          </div>
+        </header>
+        <div id="calendar"></div>
+        <footer class="calendar-footer"><span><i class="legend today-dot"></i>今天 <i class="legend check-dot"></i>已打卡 <i class="legend photo-dot"></i>有照片</span><span id="calendarHint">点击日期，留下一张今天的照片</span></footer>
+      </section>
+      <section id="importPage" class="glass page simple-page" hidden>
+        <p class="eyebrow">IMPORT YOUR SCHEDULE</p><h1>把课表带进日历</h1><p class="subtitle">选择课表文件，一次导入每一天的安排。</p>
+        <form id="importForm" class="import-box"><label class="import-file-entry"><span class="upload-mark" aria-hidden="true">↥</span><span>选择 Excel 课表</span><input id="xlsx" class="sr-only" type="file" accept=".xlsx" required aria-label="选择 Excel 课表"></label><p>支持项目中的学期课表 · .xlsx</p><p id="importFilename" role="status"></p><button id="importButton" class="primary" type="submit">导入课表 <span aria-hidden="true">→</span></button><p id="importResult" role="status"></p></form>
+      </section>
+      <section id="checkinsPage" class="glass page simple-page" hidden>
+        <p class="eyebrow">ONE DAY AT A TIME</p><h1>每一次打开，都算数</h1><p class="subtitle">从这份日历开始，记录你到来的日子。</p>
+        <div class="stats"><article><span>累计打开</span><strong id="openCount">0<small>天</small></strong></article><article><span>完成打卡</span><strong id="checkCount">0<small>天</small></strong></article><article><span>今日状态</span><strong id="todayStatus" class="text-stat"></strong></article></div>
+        <h2>每日记录</h2><div id="visitList" class="visit-list"></div>
+      </section>
+      <section id="aiPage" class="glass page chat-page" hidden>
+        <header class="chat-heading"><h1>Agenda <span> / Chat</span></h1><button id="aiStatus" class="pill" type="button" aria-controls="modelSettings" title="模型设置">选择模型</button></header>
+
+        <details id="profilePanel"><summary>我的学习画像 · 本地记录</summary><button id="generateProfile" type="button">生成学习画像</button><div id="profileContent"></div></details>
+        <div id="chatMessages" class="chat-messages" role="log" aria-live="polite"></div>
+        <div id="aiProposals" class="ai-proposals"></div>
+        <form id="chatForm" class="chat-compose">
+          <label class="sr-only" for="chatInput">发给 AI 的消息</label><textarea id="chatInput" maxlength="6000" required placeholder="给 Agenda 发消息… 修改课程、安排学习，或直接说是否增加时间"></textarea>
+          <div class="chat-attachments"><label class="chat-file-entry"><span aria-hidden="true">＋</span> 附加课表<input id="chatFile" class="sr-only" type="file" accept=".xlsx" aria-label="附加 Excel 课表"></label><span id="chatAttachment" class="muted" aria-live="polite"></span><button id="clearAttachment" type="button" hidden>移除附件</button></div>
+          <div class="chat-send"><span class="muted">本地保存 · 根据你的记录与偏好安排</span><button id="chatSend" class="primary">发送 ↑</button></div>
+        </form><p id="aiError" class="error" role="alert"></p>
+      </section>
+      <p id="connection" role="alert" hidden></p>
+      <section id="settingsPage" class="glass page simple-page" hidden>
+        <p class="eyebrow">MAKE IT YOURS</p><h1>设置</h1><p class="subtitle">选择适合此刻的光线。</p>
+        <fieldset class="appearance-settings"><legend>画面选项</legend>
+          <label class="theme-choice"><input type="radio" name="agendaTheme" value="light"><span class="theme-swatch light-swatch" aria-hidden="true"></span><span>浅色玻璃<small>清透柔和，留住日光</small></span></label>
+          <label class="theme-choice"><input type="radio" name="agendaTheme" value="dark"><span class="theme-swatch dark-swatch" aria-hidden="true">· ˙ ·</span><span>深色玻璃<small>黑色毛玻璃，光点缓缓飘落</small></span></label>
+          <label class="preference-toggle"><input id="shortBoot" type="checkbox"><span>简短开场<small>直接显示 KEEP GOING，再展开进入日历</small></span></label>
+        </fieldset>
+        <label class="language-setting">语言 / Language<select id="languageSelect"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label>
+        <p id="appearanceStatus" class="muted" role="status">外观选择会保存在这台电脑。</p>
+        <details id="modelSettings" open><summary>模型设置</summary>
+          <div id="configuredModels" class="configured-models"></div>
+          <button id="addModel" type="button">＋ 添加新模型</button>
+          <form id="aiConfigForm" class="ai-config" hidden>
+          <h3 id="modelFormTitle">配置模型</h3>
+          <label>服务商<select id="modelProvider"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI / GPT</option><option value="claude">Claude（兼容接口）</option><option value="custom">其他兼容服务</option></select></label>
+          <p id="providerHint" class="muted"></p>
+          <label>API 地址<input name="base_url" type="url" value="https://api.deepseek.com" required></label>
+          <label>模型名称<input name="model" value="deepseek-chat" maxlength="100" required></label>
+          <label>API Key<input name="api_key" type="password" autocomplete="off" placeholder="输入你的密钥，已配置时留空保留"></label>
+          <div class="model-form-actions"><button class="primary">保存并使用</button><button id="cancelModel" type="button">取消</button></div><p class="muted">每个模型的密钥分别加密保存在本机。AI 会将相关聊天和日程发送给当前选择的服务商。已保存配置不代表已验证连通性。</p>
+        </form><p id="modelConfigStatus" class="muted" role="status"></p></details>
+      </section>
+    </main>
+  </div>
+  <dialog id="dayDialog" aria-labelledby="dayTitle">
+    <div class="dialog-top"><div><p class="eyebrow">A MOMENT OF YOUR DAY</p><h2 id="dayTitle"></h2></div><button class="close" data-close="dayDialog" aria-label="关闭日期">×</button></div>
+    <p id="dayState" class="subtitle"></p><div id="dayPhotos" class="day-photos"></div>
+    <div id="photoActions"><label class="photo-upload">＋ 上传今天的照片<input id="photoInput" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" aria-label="上传今天的照片" multiple></label><button id="checkinButton" class="primary">完成今日打卡</button><p id="photoHint" class="muted"></p></div><p id="dayError" class="error" role="alert"></p>
+  </dialog>
+  <dialog id="taskDialog" aria-labelledby="taskTitle">
+    <form id="taskForm"><div class="dialog-top"><h2 id="taskTitle">安排一件事</h2><button type="button" class="close" data-close="taskDialog" aria-label="关闭任务">×</button></div>
+      <input name="id" type="hidden"><label>任务名称<input name="title" maxlength="100" placeholder="给这段时间一个名字" required></label>
+      <label>日期<input name="date" type="date" required></label>
+      <div class="form-row"><label>开始<input name="start" type="time" required></label><label>结束<select name="end" required></select></label></div>
+      <label>备注<textarea name="note" maxlength="1000" placeholder="地点，或想提醒自己的事"></textarea></label><p id="taskError" class="error" role="alert"></p>
+      <div class="form-actions"><button id="deleteTask" type="button" class="danger" hidden>删除任务</button><button id="completeTask" type="button" hidden>完成任务</button><button id="saveTask" class="primary">保存安排</button></div>
+    </form>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/app.js"></script>
+  <script type="module" src="/ai.js"></script>
+</body></html>

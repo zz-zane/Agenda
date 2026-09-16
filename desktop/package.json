@@ -1,0 +1,45 @@
+{
+  "name": "agenda-desktop",
+  "productName": "Agenda",
+  "version": "2.1.0",
+  "description": "本地学习日历与 AI 学习规划",
+  "author": "zz-zane",
+  "license": "MIT",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.3.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.github.zz-zane.agenda",
+    "asar": true,
+    "directories": {"output": "../dist/windows"},
+    "files": ["main.cjs", "preload.cjs", "package.json"],
+    "extraResources": [
+      {"from": "../.preview/windows-build/backend/AgendaBackend", "to": "backend"},
+      {"from": "../.preview/windows-build/source/dsh-slim", "to": "backend/_internal/dsh"},
+      {"from": "../.preview/windows-build/source/dsh-slim/node_modules", "to": "backend/_internal/dsh/node_modules"},
+      {"from": "../.preview/windows-build/source/licenses", "to": "licenses"},
+      {"from": "../LICENSE", "to": "LICENSE-Agenda.txt"},
+      {"from": "../LICENSE-Swarm-MIT.txt", "to": "LICENSE-Swarm-MIT.txt"}
+    ],
+    "win": {"target": "nsis", "icon": "../.preview/windows-build/agenda.ico"},
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": false,
+      "artifactName": "Agenda-Setup-${version}-${arch}.${ext}",
+      "installerLanguages": ["zh_CN", "en_US"],
+      "language": "2052"
+    }
+  }
+}

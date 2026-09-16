@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {monthCells,navigate,weekStart,canRecord,canEdit,eventLayout} from './calendar.js';
+const september=monthCells('2026-09-12');
+assert.equal(september.length,35);
+assert.equal(september[0].date,'2026-08-30');
+assert.equal(september[2].date,'2026-09-01');
+assert.equal(monthCells('2028-02-01').filter(x=>!x.outside).length,29);
+assert.equal(navigate('2026-01-31','month',1),'2026-02-01');
+assert.equal(weekStart('2026-09-12'),'2026-09-06');
+assert(canRecord('2026-09-12','2026-09-12'));
+assert(!canRecord('2026-09-11','2026-09-12'));
+assert(!canRecord('2026-09-13','2026-09-12'));
+assert(!canEdit('2026-09-11','2026-09-12'));
+const layout=eventLayout([{id:1,start:'08:30',end:'10:00'},{id:2,start:'09:00',end:'10:30'},{id:3,start:'10:30',end:'11:00'}]);
+assert.deepEqual(layout.map(t=>[t.lane,t.lanes]),[[0,2],[1,2],[0,1]]);
+console.log('Calendar dates, permissions and overlapping event placement passed.');
