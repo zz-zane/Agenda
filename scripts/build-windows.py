@@ -3,12 +3,9 @@ from pathlib import Path
 import hashlib
 import importlib.metadata
 import json
-import os
 import shutil
 import subprocess
 import sys
-
-from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / '.preview' / 'windows-build'
@@ -22,7 +19,7 @@ def stage_licenses(source):
     destination = source / 'licenses'
     destination.mkdir(exist_ok=True)
     shutil.copyfile(Path(sys.base_prefix) / 'LICENSE.txt', destination / 'Python.txt')
-    for name in ('Pillow', 'openpyxl', 'et-xmlfile', 'PyInstaller'):
+    for name in ('Pillow', 'openpyxl', 'et-xmlfile', 'PyInstaller', 'numpy', 'sherpa-onnx', 'sherpa-onnx-core', 'sounddevice', 'cffi'):
         distribution = importlib.metadata.distribution(name)
         for file in distribution.files:
             if file.name.upper().startswith(('LICENSE', 'LICENCE', 'COPYING')):
@@ -41,8 +38,8 @@ def main():
         shutil.rmtree(source)
     source.mkdir()
     stage_licenses(source)
-    for name in ('desktop_host.py', 'local_server.py', 'local_ai.py', 'local_profile.py',
-                 'local_secrets.py', 'dsh_bridge.py', 'ai_rules.md', 'LICENSE', 'LICENSE-Swarm-MIT.txt'):
+    for name in ('desktop_host.py', 'desktop_pet.py', 'local_server.py', 'local_ai.py', 'local_profile.py',
+                 'local_secrets.py', 'local_schedule.py', 'local_context.py', 'desktop_tools.py', 'dsh_bridge.py', 'ai_rules.md', 'LICENSE', 'LICENSE-Swarm-MIT.txt'):
         shutil.copyfile(ROOT / name, source / name)
     for name in ('frontend', 'ai_skills'):
         for file in (ROOT / name).rglob('*'):
@@ -50,6 +47,9 @@ def main():
                 target = source / file.relative_to(ROOT)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(file, target)
+    shutil.copytree(ROOT / 'agenda_pet', source / 'agenda_pet', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    if not (source / 'agenda_pet/models/sensevoice/model.int8.onnx').is_file():
+        raise SystemExit('Local voice models missing: see agenda_pet/README.md before building.')
     dsh = source / 'dsh'
     dsh.mkdir()
     for name in ('package.json', 'package-lock.json', 'agenda-plugin.mjs'):
@@ -65,16 +65,12 @@ def main():
         if file.is_file() and 'node_modules' not in file.parts:
             if file.suffix in ('.db', '.dpapi', '.xlsx', '.key', '.pem') or file.name.startswith('.env'):
                 raise SystemExit('Private input rejected: ' + file.name)
-    # Reuse the existing favicon colours and letter in a native Windows icon.
-    icon = Image.new('RGBA', (256, 256))
-    draw = ImageDraw.Draw(icon)
-    draw.rounded_rectangle((0, 0, 255, 255), radius=72, fill='#d9eaf4')
-    font = ImageFont.truetype(str(Path(os.environ['WINDIR']) / 'Fonts' / 'georgia.ttf'), 208)
-    draw.text((128, 120), 'a', font=font, fill='#244b6a', anchor='mm')
-    icon.save(BUILD / 'agenda.ico', sizes=[(16, 16), (32, 32), (48, 48), (128, 128), (256, 256)])
+    shutil.copyfile(ROOT / 'desktop' / 'assets' / 'agenda.ico', BUILD / 'agenda.ico')
     command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', '--console',
                '--name', 'AgendaBackend', '--distpath', BUILD / 'backend', '--workpath', BUILD / 'pyinstaller',
                '--specpath', BUILD, '--icon', BUILD / 'agenda.ico']
+    command += ['--add-data', str(source / 'agenda_pet' / 'assets') + ';agenda_pet/assets']
+    command += ['--add-data', str(source / 'agenda_pet' / 'models') + ';agenda_pet/models', '--collect-all', 'sherpa_onnx']
     for name in ('frontend', 'ai_skills', 'ai_rules.md'):
         command += ['--add-data', str(source / name) + ';' + ('.' if name == 'ai_rules.md' else name)]
     command += [source / 'desktop_host.py']
@@ -88,7 +84,7 @@ def main():
     installer = output / f'Agenda-Setup-{version}-x64.exe'
     digest = hashlib.sha256(installer.read_bytes()).hexdigest()
     (output / 'SHA256SUMS.txt').write_text(f'{digest}  {installer.name}\n', encoding='utf-8')
-    for name in ('builder-debug.yml', installer.name + '.blockmap'):
+    for name in ('builder-debug.yml',):
         file = output / name
         if file.exists():
             file.replace(BUILD / name)

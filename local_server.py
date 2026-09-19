@@ -51,8 +51,27 @@ def initialize():
         CREATE TABLE IF NOT EXISTS photos(id TEXT PRIMARY KEY, date TEXT NOT NULL, filename TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS checkins(date TEXT PRIMARY KEY, at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS visits(date TEXT PRIMARY KEY);
+        CREATE TABLE IF NOT EXISTS diary_entries(date TEXT PRIMARY KEY,content TEXT NOT NULL,
+          revision INTEGER NOT NULL,updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS reminders(id TEXT PRIMARY KEY,date TEXT NOT NULL,
+          title TEXT NOT NULL,time TEXT NOT NULL DEFAULT '',notified INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(date,title,time));
         """)
         local_ai.initialize(db)
+        db.execute('BEGIN IMMEDIATE')
+        auto_checkin(db)
+
+
+def auto_checkin(db):
+    """Both conditions are checked under the caller's write transaction."""
+    day = today()
+    photo = db.execute('SELECT 1 FROM photos WHERE date=?', (day,)).fetchone()
+    completed = db.execute('''SELECT 1 FROM tasks JOIN task_meta ON tasks.id=task_meta.task_id
+        WHERE tasks.date=? AND task_meta.done=1 AND task_meta.superseded=0''', (day,)).fetchone()
+    if not photo or not completed:
+        return False
+    db.execute('INSERT OR IGNORE INTO checkins VALUES (?,?)', (day, datetime.now().isoformat()))
+    return True
 
 
 def valid_date(value):
@@ -81,6 +100,27 @@ def task_fields(body):
     if not 0 <= minutes(start) < minutes(end) <= 1440:
         raise ValueError("结束时间必须晚于开始时间，最晚为 24:00")
     return day, title.strip(), start, end, note
+
+
+def save_reminder(db, body):
+    day = valid_date(body.get('date'))
+    title, clock = body.get('title'), body.get('time', '')
+    if day < today(): raise ValueError('不能添加过去日期的提醒')
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= 100:
+        raise ValueError('请填写 1–100 字的提醒事项')
+    if not isinstance(clock, str) or (clock and minutes(clock) >= 1440):
+        raise ValueError('提醒时间必须在 00:00–23:59 之间')
+    db.execute('INSERT OR IGNORE INTO reminders(id,date,title,time) VALUES (?,?,?,?)',
+               (uuid.uuid4().hex,day,title.strip(),clock))
+    return dict(db.execute('SELECT * FROM reminders WHERE date=? AND title=? AND time=?',
+                           (day,title.strip(),clock)).fetchone())
+
+
+def due_reminders(db, now=None):
+    now = now or datetime.now()
+    return [dict(r) for r in db.execute(
+        "SELECT * FROM reminders WHERE date=? AND time<=? AND notified=0 ORDER BY time,id",
+        (now.date().isoformat(),now.strftime('%H:%M')))]
 
 
 def parse_xlsx(raw):
@@ -164,11 +204,18 @@ class Handler(SimpleHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/api/state":
             with database() as db:
-                result = {key: [dict(r) for r in db.execute("SELECT * FROM " + key)] for key in ("tasks", "photos", "checkins", "visits")}
-                result['tasks'] = [t for t in local_ai.context(db, sys.modules[__name__])['tasks'] if not t.get('superseded')]
+                result = {key: [dict(r) for r in db.execute("SELECT * FROM " + key)] for key in ("tasks", "photos", "checkins", "visits", "diary_entries")}
+                context = local_ai.context(db, sys.modules[__name__])
+                result['tasks'] = [t for t in context['tasks'] if not t.get('superseded')]
+                result['goals'] = context['goals']
+                result['reminders'] = [dict(r) for r in db.execute('SELECT * FROM reminders ORDER BY date,time,id')]
             return self.json({**result, "today": today()})
         if path == '/api/ai/state':
             return self.json(local_ai.state(sys.modules[__name__]))
+        if path == '/api/reminders/due':
+            with database() as db:return self.json({'reminders':due_reminders(db)})
+        if path == '/api/ai/context':
+            with database() as db:return self.json(local_ai.local_context.status(sys.modules[__name__],db))
         if path == '/api/profile':
             with database() as db:return self.json(local_profile.state(db))
         if path.startswith("/photos/"):
@@ -235,6 +282,7 @@ class Handler(SimpleHTTPRequestHandler):
                         if day != today():
                             raise ValueError("日期已变化，请重新打开今天")
                         db.execute("INSERT INTO photos VALUES (?,?,?)", (name[:-4], day, name))
+                        auto_checkin(db)
                 except Exception:
                     target.unlink(missing_ok=True)
                     raise
@@ -257,13 +305,35 @@ class Handler(SimpleHTTPRequestHandler):
                 db.execute("BEGIN IMMEDIATE")
                 if route == "/api/open":
                     db.execute("INSERT OR IGNORE INTO visits VALUES (?)", (today(),))
+                elif route == '/api/diary':
+                    day=valid_date(body.get('date'))
+                    if day!=today():return self.json({'error':'只能编辑今天的日记，历史日记只可查看'},403)
+                    content,revision=body.get('content'),body.get('revision')
+                    if not isinstance(content,str) or len(content)>10000:
+                        raise ValueError('日记最多可写10000字')
+                    if type(revision) is not int or revision<0:raise ValueError('日记版本不正确')
+                    old=db.execute('SELECT revision FROM diary_entries WHERE date=?',(day,)).fetchone()
+                    if revision!=(old['revision'] if old else 0):
+                        return self.json({'error':'日记已在另一窗口更新，你的文字仍保留在编辑框，请复制后重新打开日记'},409)
+                    db.execute('''INSERT INTO diary_entries VALUES (?,?,?,?) ON CONFLICT(date) DO UPDATE
+                        SET content=excluded.content,revision=excluded.revision,updated_at=excluded.updated_at''',
+                        (day,content,revision+1,datetime.now().isoformat()))
+                elif route == '/api/reminders':
+                    return self.json(save_reminder(db,body))
+                elif route == '/api/reminders/delete':
+                    db.execute('DELETE FROM reminders WHERE id=? AND date>=?',(body.get('id'),today()))
+                elif route == '/api/reminders/ack':
+                    ids=body.get('ids')
+                    if not isinstance(ids,list) or len(ids)>100 or not all(isinstance(i,str) for i in ids):
+                        raise ValueError('提醒确认格式错误')
+                    due={r['id'] for r in due_reminders(db)}
+                    db.executemany('UPDATE reminders SET notified=1 WHERE id=?',[(i,) for i in ids if i in due])
                 elif route == "/api/checkin":
                     day = valid_date(body.get("date"))
                     if day != today():
                         return self.json({"error": "只能完成当天打卡"}, 403)
-                    if not db.execute("SELECT 1 FROM photos WHERE date=?", (day,)).fetchone():
-                        raise ValueError("请先上传当天照片，再完成打卡")
-                    db.execute("INSERT OR IGNORE INTO checkins VALUES (?,?)", (day, datetime.now().isoformat()))
+                    if not auto_checkin(db):
+                        raise ValueError("完成至少一项当天任务并上传当天照片后，将自动打卡")
                 elif route == "/api/tasks":
                     fields = task_fields(body)
                     if fields[0] < today():
@@ -294,9 +364,9 @@ class Handler(SimpleHTTPRequestHandler):
                     task=db.execute('SELECT * FROM tasks WHERE id=?',(body.get('id'),)).fetchone()
                     if not task or task['date'] != today(): raise ValueError('只能完成今天的任务')
                     meta=db.execute('SELECT * FROM task_meta WHERE task_id=?',(task['id'],)).fetchone()
-                    if task['origin'] or (meta and meta['superseded']): raise ValueError('课表或已替换任务不能标记完成')
-                    if not db.execute('SELECT 1 FROM photos WHERE date=?',(today(),)).fetchone(): raise ValueError('请先在月历上传今天的照片')
+                    if meta and meta['superseded']: raise ValueError('已替换任务不能标记完成')
                     db.execute('INSERT INTO task_meta(task_id,done) VALUES (?,1) ON CONFLICT(task_id) DO UPDATE SET done=1',(task['id'],))
+                    auto_checkin(db)
                 else:
                     return self.json({"error": "接口不存在"}, 404)
             return self.json({"ok": True})

@@ -79,6 +79,10 @@ def make_server(token):
 
 
 def main():
+    if sys.argv[1:] == ['--pet']:
+        from desktop_pet import main as pet_main
+        pet_main()
+        return
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=Path, required=True)
     args = parser.parse_args()
@@ -90,6 +94,7 @@ def main():
     server = make_server(token)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
+    app.local_ai.start_compaction(app,startup=True)
     print(json.dumps({'port': server.server_port}), flush=True)
     try:
         # EOF also arrives if the desktop shell crashes; no orphan listener remains.

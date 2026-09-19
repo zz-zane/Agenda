@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+  <script>if(window.agendaToday?.standalone)document.documentElement.classList.add('today-window');</script>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#d9eaf4"><link rel="icon" href="/favicon.svg">
   <script>{let theme=window.agendaAppearance?.theme||'light';try{const saved=localStorage.getItem('agenda.theme');if(['light','dark'].includes(saved))theme=saved;}catch{}document.documentElement.dataset.theme=theme;}</script>
@@ -15,6 +16,7 @@
   </div>
   <script>
   (()=>{
+    if(window.agendaToday?.standalone){document.getElementById('boot-sequence-demo').remove();return;}
     const root=document.getElementById('boot-sequence-demo'),status=root.querySelector('.boot-status'),stage=root.querySelector('.daylight-stage');
     const dark=document.documentElement.dataset.theme==='dark';
     if(dark){root.classList.add('diagonal-boot');root.style.setProperty('--meteor-angle',`${Math.atan2(innerHeight,innerWidth)}rad`);}
@@ -57,8 +59,9 @@
       <div class="nav-label">我的空间</div>
       <nav aria-label="主导航">
         <button data-page="calendar" class="nav-item active"><span aria-hidden="true">▦</span><span>日历<small>Calendar</small></span></button>
+        <button data-page="overview" class="nav-item"><span aria-hidden="true">▥</span><span>总览<small>Overview</small></span></button>
+        <button data-page="diary" class="nav-item"><span aria-hidden="true">▤</span><span>日记<small>Diary</small></span></button>
         <button data-page="import" class="nav-item"><span aria-hidden="true">↥</span><span>导入<small>Import</small></span></button>
-        <button data-page="checkins" class="nav-item"><span aria-hidden="true">✓</span><span>打开与打卡<small>Check-ins</small></span></button>
         <button data-page="ai" class="nav-item"><span aria-hidden="true">✧</span><span>AI<small>Chat & plan</small></span></button>
         <button data-page="settings" class="nav-item"><span aria-hidden="true">⚙</span><span>设置<small>Settings</small></span></button>
       </nav>
@@ -76,17 +79,30 @@
         <div id="calendar"></div>
         <footer class="calendar-footer"><span><i class="legend today-dot"></i>今天 <i class="legend check-dot"></i>已打卡 <i class="legend photo-dot"></i>有照片</span><span id="calendarHint">点击日期，留下一张今天的照片</span></footer>
       </section>
+      <section id="overviewPage" class="glass page" hidden>
+        <header class="calendar-header"><div><p class="eyebrow">AGENDA / SMALL STEPS, EVERY DAY</p><h1>总览</h1><p class="subtitle">每一次完成，都看得见。</p></div>
+          <div class="calendar-tools"><div class="segments" aria-label="总览范围"><button data-overview-view="week">每周</button><button data-overview-view="month" class="selected">每月</button></div><div class="date-nav"><button id="overviewPrev" aria-label="上个月">‹</button><button id="overviewToday">本月</button><button id="overviewNext" aria-label="下个月">›</button></div></div>
+        </header>
+        <section class="overview-card"><div class="overview-card-heading"><h2 id="overviewMonth"></h2><span class="muted">学习打卡</span></div><div id="overviewCalendar"></div><p id="heatmapDetail" class="muted"></p>
+          <div class="heatmap-footer"><div><strong id="overviewStreak">0</strong><small>连续打卡 · 天</small></div><div><strong id="overviewRate">—</strong><small>打卡率 <span id="overviewDays"></span></small></div><div id="completionLegend" class="completion-legend"></div></div>
+          <p class="muted metric-note">完成当天任务 + 上传照片即自动打卡。打卡率按所选周／月截至今天的天数计算；连续天数可跨周、跨月。</p>
+        </section>
+        <section class="overview-card"><div class="overview-card-heading"><h2>完成进度</h2><span id="progressCount" class="muted"></span></div><p class="muted">全部已排任务，包含未来安排；仅勾选完成计入进度，不随周／月切换。</p><div id="overallProgress"></div></section>
+      </section>
+      <section id="diaryPage" class="glass page" hidden>
+        <header class="calendar-header"><div><p class="eyebrow">AGENDA / DEAR TODAY</p><h1>日记</h1><p class="subtitle">把今天，写进书里。</p></div><div class="date-nav"><label class="sr-only" for="diaryDate">日记日期</label><input id="diaryDate" type="date"><button id="diaryToday">今天</button></div></header>
+        <div class="diary-surface"><article class="diary-book" aria-label="我的日记本">
+          <section class="diary-paper diary-left"><p class="diary-kicker">A DAY TO REMEMBER</p><div class="diary-date"><span id="diaryDayNumber"></span><div><h2 id="diaryDateHeading"></h2><p id="diaryWeekday"></p></div></div><p id="diaryCheckin" class="diary-checkin"></p><h3>完成的小事</h3><ul id="diaryTasks" class="diary-tasks"></ul><p class="diary-page-number">01 / MOMENTS</p><button id="diaryPagePrev" class="diary-turn" type="button" aria-label="前一天" title="前一天"></button></section>
+          <section class="diary-paper diary-right"><div class="diary-photo-area"><button id="diaryPhotos" type="button" aria-label="点击相片，查看下一张"><span id="diaryPhotoStack"></span></button><p id="diaryPhotoCaption"></p><button id="diaryAddPhoto" type="button">＋ 留下一张照片</button></div><form id="diaryForm"><label for="diaryText">今天想说的话</label><textarea id="diaryText" maxlength="10000" placeholder="今天发生了什么？有什么想留给未来的自己……"></textarea><div class="diary-save-row"><span id="diarySaveStatus" role="status" aria-live="polite"></span><button id="diarySave" type="submit">保存日记</button></div></form><p class="diary-page-number">02 / WORDS</p><button id="diaryPageNext" class="diary-turn" type="button" aria-label="后一天" title="后一天"></button></section>
+        </article></div>
+      </section>
       <section id="importPage" class="glass page simple-page" hidden>
         <p class="eyebrow">IMPORT YOUR SCHEDULE</p><h1>把课表带进日历</h1><p class="subtitle">选择课表文件，一次导入每一天的安排。</p>
         <form id="importForm" class="import-box"><label class="import-file-entry"><span class="upload-mark" aria-hidden="true">↥</span><span>选择 Excel 课表</span><input id="xlsx" class="sr-only" type="file" accept=".xlsx" required aria-label="选择 Excel 课表"></label><p>支持项目中的学期课表 · .xlsx</p><p id="importFilename" role="status"></p><button id="importButton" class="primary" type="submit">导入课表 <span aria-hidden="true">→</span></button><p id="importResult" role="status"></p></form>
       </section>
-      <section id="checkinsPage" class="glass page simple-page" hidden>
-        <p class="eyebrow">ONE DAY AT A TIME</p><h1>每一次打开，都算数</h1><p class="subtitle">从这份日历开始，记录你到来的日子。</p>
-        <div class="stats"><article><span>累计打开</span><strong id="openCount">0<small>天</small></strong></article><article><span>完成打卡</span><strong id="checkCount">0<small>天</small></strong></article><article><span>今日状态</span><strong id="todayStatus" class="text-stat"></strong></article></div>
-        <h2>每日记录</h2><div id="visitList" class="visit-list"></div>
-      </section>
       <section id="aiPage" class="glass page chat-page" hidden>
         <header class="chat-heading"><h1>Agenda <span> / Chat</span></h1><button id="aiStatus" class="pill" type="button" aria-controls="modelSettings" title="模型设置">选择模型</button></header>
+        <p id="contextStatus" class="muted" role="status"></p>
 
         <details id="profilePanel"><summary>我的学习画像 · 本地记录</summary><button id="generateProfile" type="button">生成学习画像</button><div id="profileContent"></div></details>
         <div id="chatMessages" class="chat-messages" role="log" aria-live="polite"></div>
@@ -106,6 +122,30 @@
           <label class="preference-toggle"><input id="shortBoot" type="checkbox"><span>简短开场<small>直接显示 KEEP GOING，再展开进入日历</small></span></label>
         </fieldset>
         <label class="language-setting">语言 / Language<select id="languageSelect"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label>
+        <fieldset class="appearance-settings"><legend>软件更新</legend>
+          <p id="updateVersion" class="muted"></p>
+          <label class="preference-toggle"><input id="autoUpdate" type="checkbox"><span>自动检查更新<small>启动后及每 4 小时检查，自动下载，退出时安装</small></span></label>
+          <p class="muted">更新来源：GitHub · zz-zane/Agenda</p>
+          <p id="updateStatus" class="muted" role="status" aria-live="polite"></p>
+          <progress id="updateProgress" max="100" hidden aria-label="更新下载进度"></progress>
+          <div class="update-actions"><button id="checkUpdate" type="button">检查更新</button><button id="installUpdate" type="button" hidden>立即重启更新</button></div>
+        </fieldset>
+        <fieldset class="appearance-settings"><legend>桌面宠物</legend>
+          <label class="preference-toggle"><input id="petEnabled" type="checkbox"><span>显示小猫<small>单击今日待办，双击打开 AI</small></span></label>
+          <p id="petStatus" class="muted" role="status"></p>
+          <label class="preference-toggle"><input id="voiceEnabled" type="checkbox"><span>语音助手<small>说“你好”唤醒，停顿后发送到当前 AI</small></span></label>
+          <label class="preference-toggle"><input id="voiceSpeak" type="checkbox"><span>朗读 AI 回复</span></label>
+          <label>本地音色<select id="voiceSpeaker" aria-label="本地音色"></select></label>
+          <label>收音门槛<input id="voiceThreshold" type="number" min="100" max="3000" step="50" value="300"></label>
+          <button id="voicePreview" type="button">试听音色</button>
+          <p class="muted">录音在本机识别，不上传；识别文字发送给当前 AI。朗读时说“你好”可打断。关闭语音助手会释放麦克风。</p>
+          <p id="voiceStatus" class="muted" role="status"></p>
+          <label class="preference-toggle"><input id="desktopAccess" type="checkbox"><span>开放权限<small>打开授权软件、只读审查代码、另存修改副本</small></span></label>
+          <p class="muted">默认关闭。仅访问你选择的软件和代码文件；代码内容会发送给当前 AI 模型。不会执行代码、终端命令或覆盖、删除原文件。已打开的软件本身不受此开关控制。</p>
+          <div class="access-actions"><button id="accessAddApp" type="button">＋ 授权软件</button><button id="accessAddCode" type="button">＋ 授权代码文件</button><button id="accessOutput" type="button">查看修改副本</button></div>
+          <div id="accessItems" class="access-items"></div>
+          <p id="accessStatus" class="muted" role="status"></p>
+        </fieldset>
         <p id="appearanceStatus" class="muted" role="status">外观选择会保存在这台电脑。</p>
         <details id="modelSettings" open><summary>模型设置</summary>
           <div id="configuredModels" class="configured-models"></div>
@@ -124,16 +164,29 @@
   </div>
   <dialog id="dayDialog" aria-labelledby="dayTitle">
     <div class="dialog-top"><div><p class="eyebrow">A MOMENT OF YOUR DAY</p><h2 id="dayTitle"></h2></div><button class="close" data-close="dayDialog" aria-label="关闭日期">×</button></div>
-    <p id="dayState" class="subtitle"></p><div id="dayPhotos" class="day-photos"></div>
-    <div id="photoActions"><label class="photo-upload">＋ 上传今天的照片<input id="photoInput" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" aria-label="上传今天的照片" multiple></label><button id="checkinButton" class="primary">完成今日打卡</button><p id="photoHint" class="muted"></p></div><p id="dayError" class="error" role="alert"></p>
+    <p id="dayState" class="subtitle"></p>
+    <section><h3>提醒事项</h3><div id="dayReminders"></div><button id="addReminder" type="button">＋ 添加提醒</button></section>
+    <section id="todayTodos" hidden aria-labelledby="todayTodosTitle"><h3 id="todayTodosTitle"></h3><div id="todayTodoList" class="today-todo-list"></div></section>
+    <div id="dayPhotos" class="day-photos"></div>
+    <div id="photoActions"><label class="photo-upload">＋ 上传今天的照片<input id="photoInput" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" aria-label="上传今天的照片" multiple></label><p id="photoHint" class="muted"></p></div><p id="dayError" class="error" role="alert"></p>
   </dialog>
   <dialog id="taskDialog" aria-labelledby="taskTitle">
     <form id="taskForm"><div class="dialog-top"><h2 id="taskTitle">安排一件事</h2><button type="button" class="close" data-close="taskDialog" aria-label="关闭任务">×</button></div>
       <input name="id" type="hidden"><label>任务名称<input name="title" maxlength="100" placeholder="给这段时间一个名字" required></label>
       <label>日期<input name="date" type="date" required></label>
       <div class="form-row"><label>开始<input name="start" type="time" required></label><label>结束<select name="end" required></select></label></div>
+      <button id="taskReminder" type="button">在这个时间添加提醒</button>
       <label>备注<textarea name="note" maxlength="1000" placeholder="地点，或想提醒自己的事"></textarea></label><p id="taskError" class="error" role="alert"></p>
       <div class="form-actions"><button id="deleteTask" type="button" class="danger" hidden>删除任务</button><button id="completeTask" type="button" hidden>完成任务</button><button id="saveTask" class="primary">保存安排</button></div>
+    </form>
+  </dialog>
+  <dialog id="reminderDialog" aria-labelledby="reminderTitle">
+    <form id="reminderForm"><div class="dialog-top"><h2 id="reminderTitle">添加提醒</h2><button type="button" class="close" data-close="reminderDialog" aria-label="关闭">×</button></div>
+      <label>提醒事项<input name="title" maxlength="100" required></label>
+      <label>日期<input name="date" type="date" required></label>
+      <label>具体时间（可留空）<input name="time" type="time"></label>
+      <p class="muted">不填时间：当天打开 Agenda 时提醒；填写时间：到点提醒，当天晚些打开会补提醒。</p>
+      <p id="reminderError" class="error" role="alert"></p><button class="primary">保存提醒</button>
     </form>
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>

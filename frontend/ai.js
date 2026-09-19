@@ -27,6 +27,7 @@ function messageText(text){
   return content;
 }
 function render(){
+  renderContext();
   $('#generateProfile').disabled=busy;
   if(!busy)$('#generateProfile').textContent=data.profile?.generated?t('重新生成学习画像'):t('生成学习画像');
   const profile=$('#profileContent');profile.replaceChildren();
@@ -55,6 +56,16 @@ function render(){
     const title=p.kind==='plan'?`${b.title} · ${b.mode}`:p.kind==='import'?t('导入课表'):p.kind==='delete_import'?t('撤销课表导入'):p.kind==='delete_courses'?t('删除指定课程'):t('调整日程');
     card.append(el('h3',title),el('p',b.reason||t('请核对以下变更。')));
     if(p.kind==='plan'){
+      if(b.schedule_request){
+        const spec=b.schedule_request;
+        card.append(el('p',t`本次预览：${spec.from_date} 至 ${spec.to_date}；不会自动生成范围以外的新安排。`));
+        for(const r of spec.rules){
+          const frequency=r.per_week?t`每周 ${r.per_week} 次`:t('每天');
+          card.append(el('p',`${r.title} · ${frequency} · ${t`每次连续 ${r.minutes} 分钟`} · ${t`停止日期：${r.until}`}${r.skip_courses.length?' · '+t`当天有这些课程则跳过：${r.skip_courses.join('、')}`:''}`));
+        }
+        card.append(el('p',t`可用时段：${spec.windows.map(w=>w.start+'–'+w.end).join(' / ')}`));
+        for(const b of spec.blocked)card.append(el('p',t`不安排：${b.from_date} 至 ${b.to_date} ${b.start}–${b.end}`));
+      }
       if(b.assessment){card.append(el('p',t`依据学习画像 #${b.assessment.profile_id} · 本计划完成估计`));showEstimates(card,b.assessment.estimates);for(const tip of b.assessment.adjustments)card.append(el('p',t('定制调整：')+tip));}
       const old=data.goals.find(g=>g.id===b.goal_id);
       card.append(el('p',t`截止：${b.deadline}${old&&old.deadline!==b.deadline?t`（由 ${old.deadline} 延长）`:''} · ${b.sessions.length} 项安排`,'proposal-summary'));
@@ -76,6 +87,14 @@ function render(){
 }
 function addSessions(card,sessions){const detail=el('details');detail.append(el('summary',t`查看 ${sessions.length} 项具体安排`));const list=el('ul',undefined,'session-list');for(const s of sessions)list.append(el('li',`${s.date} ${s.start}–${s.end} · ${s.title}${s.note?' — '+s.note:''}`));detail.append(list);card.append(detail);}
 async function load(){data=await call('/api/ai/state');render();renderModels();}
+function renderContext(){
+  const ctx=data.context||{};
+  $('#contextStatus').textContent=t(ctx.status==='running'?'正在后台压缩历史上下文，聊天记录保留':ctx.status==='retry'?'上下文压缩暂未完成，已保留旧摘要，后续自动重试':ctx.status==='no_key'?'配置模型后自动压缩上下文':ctx.status==='pending'?'历史较长，已分批压缩，后续继续':ctx.has_summary?'已使用历史摘要与近期对话 · 原始记录完整保留':'启动时自动检查上下文 · 暂无需压缩');
+}
+setInterval(async()=>{
+  if(data.context?.status!=='running'||document.hidden)return;
+  try{data.context=await call('/api/ai/context');renderContext();}catch{}
+},5000);
 function showEstimates(parent,estimates){
   parent.append(el('p',t('以下为模型估计，未经统计校准，不保证完成。'),'muted'));
   for(const e of estimates)parent.append(el('p',`${e.difficulty}：${e.low===null?t('数据不足，暂不量化'):`${e.low}%–${e.high}%`} · ${e.basis}`));
@@ -130,14 +149,26 @@ $('#aiConfigForm').onsubmit=async e=>{
 };
 $('#chatFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;$('#aiError').textContent='';$('#chatSend').disabled=true;try{if(!/\.xlsx$/i.test(file.name)||file.size>12*1024*1024)throw Error(t('请选择 12MB 以内的 .xlsx 文件'));const r=await fetch('/api/ai/attachment',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(file.name)},body:file});const a=await r.json();if(!r.ok)throw Error(a.error);attachment=a;$('#chatAttachment').textContent=t`${a.name} · ${a.count} 项，尚未导入`;$('#clearAttachment').hidden=false;}catch(e){error(e);}finally{$('#chatSend').disabled=busy;}};
 $('#clearAttachment').onclick=()=>{attachment=null;$('#chatAttachment').textContent='';$('#chatFile').value='';$('#clearAttachment').hidden=true;};
+let voiceSubmission=false;
 $('#chatForm').onsubmit=async e=>{
   e.preventDefault();if(busy)return;$('#aiError').textContent='';
   const message=$('#chatInput').value.trim();
   if(!message)return;
-  busy=true;$('#chatSend').disabled=true;$('#chatSend').textContent=t('正在思考…');render();
-  try{await call('/api/ai/chat',{message,attachment_id:attachment?.id||''});$('#chatInput').value='';await load();}
-  catch(e){error(e);}finally{busy=false;$('#chatSend').disabled=false;$('#chatSend').textContent=t('发送 ↑');render();}
+  const fromVoice=voiceSubmission;voiceSubmission=false;
+  let petResult='idle';
+  busy=true;window.agendaPet?.state('working');$('#chatSend').disabled=true;$('#chatSend').textContent=t('正在思考…');render();
+  try{const reply=await call('/api/ai/chat',{message,attachment_id:attachment?.id||''});if(reply.status==='completed')petResult='done';window.agendaPet?.reply(reply.answer||'',reply.status==='completed',fromVoice);$('#chatInput').value='';await load();window.dispatchEvent(new Event('agenda-refresh'));}
+  catch(e){error(e);window.agendaPet?.reply(e.message||t('请求失败，请重试。'),false,fromVoice);}finally{busy=false;window.agendaPet?.state(petResult);$('#chatSend').disabled=false;$('#chatSend').textContent=t('发送 ↑');render();}
 };
+window.addEventListener('agenda-voice-event',event=>{
+  if(event.detail.type!=='voice-text')return;
+  const text=event.detail.text;
+  if(busy)return;
+  if($('#chatInput').value.trim()){
+    $('#chatInput').value+='\n'+text;$('#aiError').textContent=t('语音已加入草稿，请检查后发送。');window.agendaPet?.reply(t('语音已加入草稿，请检查后发送。'),false,true);return;
+  }
+  voiceSubmission=true;$('#chatInput').value=text;$('#chatForm').requestSubmit();
+});
 load().catch(error);
 
 window.addEventListener('agenda-language', () => {

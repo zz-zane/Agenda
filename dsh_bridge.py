@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parent
 VERSION = '0.1.5-rc.2'
 
 
-def run(messages, request, tools, *, schemas=(), max_calls=6, cancelled=lambda: False, timeout=120):
+def run(messages, request, tools, *, schemas=(), max_calls=6, max_tools=None, cancelled=lambda: False, timeout=120):
+    max_tools = max_calls if max_tools is None else max_tools
     package = ROOT/'dsh/node_modules/@deepseek-ai/dsh/package.json'
     node = os.environ.get('AGENDA_NODE_BINARY') or shutil.which('node')
     if not package.exists() or not node:
@@ -60,7 +61,7 @@ def run(messages, request, tools, *, schemas=(), max_calls=6, cancelled=lambda: 
                 if not isinstance(payload,dict): raise ValueError()
                 if self.path == '/bridge/tool':
                     with lock:
-                        if stopped() or state['tools'] >= max_calls:
+                        if stopped() or state['tools'] >= max_tools:
                             state['failure']='max_calls'; return self.reply({},429)
                         state['tools'] += 1
                         name,args = payload.get('name'),payload.get('args')
@@ -81,7 +82,7 @@ def run(messages, request, tools, *, schemas=(), max_calls=6, cancelled=lambda: 
                     delta = {k:v for k,v in answer.items() if k in ('role','content','reasoning_content','tool_calls')}
                     calls = delta.get('tool_calls')
                     if calls is not None:
-                        if not isinstance(calls,list) or not calls or len(calls)>max_calls-state['tools']: raise ValueError()
+                        if not isinstance(calls,list) or not calls or len(calls)>max_tools-state['tools']: raise ValueError()
                         ids=set()
                         def unique(pairs):
                             out={}

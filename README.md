@@ -6,7 +6,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-[Download v2.1](https://github.com/zz-zane/Agenda/releases/tag/v2.1) · [MIT License](LICENSE)
+[Download v3.1.1](https://github.com/zz-zane/Agenda/releases/tag/v3.1.1) · [MIT License](LICENSE)
 
 </div>
 
@@ -17,18 +17,30 @@ Agenda is a Windows desktop calendar with frosted glass themes, editable schedul
 | Feature | Details |
 | --- | --- |
 | Calendar | Browse month, week, and day views. Click an empty time slot in Week or Day to add an event. Past events are read only. |
+| Overview & completion | Open **Overview** for a compact weekly/monthly heatmap, check-in streak and rate, plus course/goal progress across all scheduled sessions including future dates. Check off today's tasks in Today, date details, or the Week/Day schedule; no photo is required. Completed tasks stay checked and read only. |
+| Diary | An open paper book on glass, with the day’s completed tasks, stacked photo prints that cycle on click, and locally autosaved writing. Previous dates are read only. |
+| Automatic updates | From 3.1.1, Settings can check the public `zz-zane/Agenda` releases, download verified updates, and install on exit. Older clients need one manual upgrade. See [publishing instructions](docs/自动更新发布.md). |
 | Timetable import | Import `.xlsx` schedules, with duplicate handling and an AI-assisted import workflow. |
-| Photo check-ins | Upload a photo from today to check in. Today shows 😊 when checked in and 😢 otherwise; past and future dates have no face. No backdated check-ins. |
+| Photo check-ins | Complete at least one task today and upload a photo to check in automatically, in either order. No separate check-in button. Today shows 😊 when checked in and 😢 otherwise; past and future dates have no face. No backdated check-ins. |
 | AI planning | Chat about your schedule, edit classes, and preview study plans before confirming changes. Rescheduling preserves the remaining syllabus and deadline; extensions require your explicit request and confirmation. |
 | Learning profile | Generate a profile from recorded facts and activity. Estimates are labeled as uncalibrated; insufficient observations do not produce numerical probabilities. |
 | Model settings | Add, edit, and switch saved model configurations. Each model's API key is encrypted separately on Windows. |
+| Cat reminders | Add date reminders from Month, timed reminders from empty Day slots, or ask the cat through voice using the configured AI model. Date reminders appear when opening that day; timed reminders appear when due or on a later opening that day. Delivered reminders do not repeat. Agenda must be running; closing it stops the timer. |
 | Display options | Light or dark frosted glass, subtle falling stars in dark mode, collapsible navigation, and animated page transitions. |
 | Language & intro | Switch the interface between English and Simplified Chinese. An optional short intro shows **KEEP GOING** without a progress bar, then opens the calendar. Preferences persist across restarts. |
 
+## New in v3.1
+
+- **Desktop cat:** enable it in Settings. Single-click opens a separate Today window with task times, daily photo uploads and check-in; double-click opens AI. Light and dark themes follow Agenda.
+- **Voice assistant:** optional local wake-word recognition, speech recognition and speech playback. AI replies appear in a speech bubble beside the cat. Recognized text uses your configured model.
+- **Restricted desktop access:** disabled by default. Allow individual apps to launch and explicitly select code files for review. Original files stay unchanged; corrected code is saved as a new file. Arbitrary commands and code execution are not supported.
+- **Longer conversations:** background summaries run at startup and incrementally during chat, using the configured provider. Original messages are retained; summarization consumes API usage and keeps the last valid summary on failure.
+- **Scheduling:** reusable scheduling rules cover daily durations, weekly frequency, continuous exercise sessions and course-dependent study blocks, with preview and confirmation before writing.
+
 ## Install on Windows
 
-1. Open the [v2.1 release](https://github.com/zz-zane/Agenda/releases/tag/v2.1).
-2. Download **Agenda-Setup-2.1.0-x64.exe**, install it, and launch Agenda from the desktop or Start menu.
+1. Open the [v3.1.1 release](https://github.com/zz-zane/Agenda/releases/tag/v3.1.1).
+2. Download **Agenda-Setup-3.1.1-x64.exe**, install it, and launch Agenda from the desktop or Start menu.
 3. Use the calendar immediately. To enable AI, open **Settings → Model settings** and enter your provider URL, model ID, and API key.
 
 The installer includes the backend and AI runtime; Python and Node.js are not required on the user's computer. It is currently **unsigned**. SHA-256 checksums are included with the release.
@@ -49,13 +61,15 @@ Use an API key issued by the selected provider. Saving a configuration does not 
 | Data | Windows desktop location |
 | --- | --- |
 | Calendar, photos, chats, imported files, and profiles | `%LOCALAPPDATA%\Agenda\data` |
+| Authorized apps | `%LOCALAPPDATA%\Agenda\desktop-access.json` |
+| Corrected code copies | `%LOCALAPPDATA%\Agenda\Code reviews` |
 | Window cache and display/language preferences | `%LOCALAPPDATA%\Agenda\window` |
 
 A fresh installation contains no user or development data. Upgrading, reinstalling, and uninstalling preserve the data directory. To back up records, close Agenda and copy the entire data directory.
 
 API keys use Windows DPAPI encryption for the current account. New model keys are stored separately under `data/model-keys/`; older `data/ai-key.dpapi` files remain compatible. Keys are not stored in SQLite, and encrypted key backups should not be treated as portable credentials.
 
-**When you use AI, relevant chat, schedule, and learning-profile context is sent to your chosen provider. Photo files are not sent.** Interface language changes do not translate your saved records or model replies; backend error messages retain their original language.
+**When you use AI, relevant chat, schedule, learning-profile context and explicitly selected code for review are sent to your chosen provider. Photo files are not sent.** Interface language changes do not translate your saved records or model replies; backend error messages retain their original language.
 
 Never commit your data directory, API keys, or environment files. Release source snapshots and installers exclude personal data and internal development records.
 
@@ -76,7 +90,7 @@ For direct timetable import, a supported `.xlsx` layout uses a sheet named `日�
 
 ## Build the Windows installer
 
-Use a clean Python virtual environment on Windows, with Node/npm available:
+Prepare the local voice model inputs described in [agenda_pet/README.md](agenda_pet/README.md); model weights are excluded from the source snapshot. Use a clean Python virtual environment on Windows, with Node/npm available:
 
 ```powershell
 .venv\Scripts\python.exe -m pip install -r desktop/requirements-build.txt
@@ -94,7 +108,7 @@ node frontend/calendar.test.mjs
 
 Desktop checks are available in `scripts/check-desktop-window.mjs` (`--preferences` covers language, short intros, and check-in faces) and `scripts/check-windows.py` (bundled runtime with a local HTTPS mock).
 
-v2.1 passed local Windows checks for the backend, model settings, data persistence, themes, languages, short intros, and check-ins. These checks use isolated data and simulated providers; they do not establish real-provider planning quality or installation acceptance on a fresh Windows device.
+v3.1 passed local Windows checks for the backend, model settings, data persistence, themes, languages, short intros, and check-ins. These checks use isolated data and simulated providers; they do not establish real-provider planning quality or installation acceptance on a fresh Windows device.
 
 The normal window uses a frosted glass visual treatment; it does not blur the desktop behind it. Supported Windows 11 systems use Acrylic when maximized. Mobile, macOS, and Linux desktop installers are not provided.
 

@@ -6,6 +6,36 @@ export const minutes = (s) => { const [h,m] = s.split(':').map(Number); return h
 export const timeOf = (m) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
 export const canRecord = (day,today) => day === today;
 export const canEdit = (day,today) => day >= today;
+export function completionByDay(tasks) {
+  const days = new Map();
+  for (const task of tasks) {
+    if (task.superseded) continue;
+    const day = days.get(task.date) || {done:0,total:0};
+    day.total++; if (task.done) day.done++;
+    days.set(task.date,day);
+  }
+  return days;
+}
+export function checkinSummary(dates, today, checkins) {
+  const checked=new Set(checkins.map(c=>c.date)),elapsed=dates.filter(day=>day<=today);
+  const active=elapsed.filter(day=>checked.has(day)).length;
+  let end=elapsed.at(-1),streak=0;
+  if(end===today&&!checked.has(end))end=plusDays(end,-1);
+  while(end&&checked.has(end)){streak++;end=plusDays(end,-1);}
+  return {active,elapsed:elapsed.length,rate:elapsed.length?Math.round(active/elapsed.length*100):null,streak};
+}
+export function allTimeProgress(tasks, goals=[]) {
+  const groups=new Map(),names=new Map(goals.map(g=>[g.id,g.title]));
+  for(const task of tasks){
+    if(task.superseded)continue;
+    const title=task.title.trim().replace(/\s+/g,' ');
+    const key=task.goal_id?'goal:'+task.goal_id:(task.origin?'course:':'task:')+title;
+    const group=groups.get(key)||{key,title:task.goal_id?(names.get(task.goal_id)||title):title,done:0,total:0};
+    group.total++;if(task.done)group.done++;
+    groups.set(key,group);
+  }
+  return [...groups.values()].sort((a,b)=>a.key.localeCompare(b.key)).map(g=>({...g,percent:Math.round(g.done/g.total*100)}));
+}
 export function monthCells(anchor) {
   const d = fromKey(anchor), first = keyOf(new Date(d.getFullYear(),d.getMonth(),1,12));
   const count = new Date(d.getFullYear(),d.getMonth()+1,0).getDate();

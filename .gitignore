@@ -18,4 +18,5 @@ node_modules/
 *.log
 dist/
 build/
+agenda_pet/models/
 *.spec
